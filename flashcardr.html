@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Study App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* 3D space for the flip effect */
+        .flashcard-container {
+            perspective: 1200px;
+        }
+        /* The element that flips */
+        .flashcard {
+            transform-style: preserve-3d;
+            transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
+        }
+        /* Hide the back of a card face when it's not facing the user */
+        .card-face {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        /* Back face is initially rotated */
+        .card-back {
+            transform: rotateY(180deg);
+        }
+        /* Class added via JS to trigger the flip */
+        .is-flipped {
+            transform: rotateY(180deg);
+        }
+        /* Styles for the modals */
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            transition: transform 0.3s ease;
+        }
+        /* Simple loading spinner */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 flex items-center justify-center min-h-screen p-4">
+
+    <!-- Welcome Screen: Shown on initial load -->
+    <div id="welcome-screen" class="w-full max-w-lg text-center p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">Flashcard Study App</h1>
+        <p class="text-slate-600 dark:text-slate-300 mb-6">Upload a JSON deck file to begin studying.</p>
+        <label for="deck-upload" class="cursor-pointer inline-block px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200">
+            📂 Upload Deck
+        </label>
+        <input type="file" id="deck-upload" class="hidden" accept=".json">
+        <p class="text-xs text-slate-400 dark:text-slate-500 mt-4">Create your own JSON files or ask an AI to format your notes for you!</p>
+    </div>
+
+    <!-- Main Flashcard App: Initially hidden -->
+    <div class="flashcard-app w-full max-w-2xl mx-auto text-center hidden">
+        <div class="flex justify-between items-center mb-4">
+            <h2 id="deck-title" class="text-xl font-bold text-slate-700 dark:text-slate-200"></h2>
+            <p class="card-counter text-slate-600 dark:text-slate-400 font-semibold"></p>
+        </div>
+
+        <!-- Flashcard 3D Container -->
+        <div class="flashcard-container w-full h-96 md:h-[450px] mb-6">
+            <div class="flashcard relative w-full h-full cursor-pointer">
+                <!-- Front of the Card -->
+                <div class="card-face card-front absolute w-full h-full flex items-center justify-center p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">
+                    <!-- Content injected by JavaScript -->
+                </div>
+                <!-- Back of the Card -->
+                <div class="card-face card-back absolute w-full h-full flex flex-col justify-between p-6 bg-blue-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-600">
+                    <div id="card-back-content" class="overflow-y-auto text-left h-full">
+                        <!-- Content injected by JavaScript -->
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-blue-200 dark:border-slate-600">
+                        <button id="simplify-btn" class="w-full px-4 py-2 bg-sky-500 text-white font-semibold rounded-lg shadow-md hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 dark:focus:ring-offset-slate-700 transition-all duration-200">✨ Simplify Concept</button>
+                        <div id="simplified-content" class="mt-3 text-sm text-left p-3 bg-sky-100 dark:bg-slate-600 rounded-lg hidden"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="navigation flex justify-center items-center space-x-4">
+            <button id="prev-btn" class="px-6 py-3 bg-white dark:bg-slate-700 dark:text-slate-200 text-slate-700 font-bold rounded-lg shadow-md hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-900 transition-all duration-200">&larr; Previous</button>
+            <button id="next-btn" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-900 transition-all duration-200">Next &rarr;</button>
+        </div>
+        <div class="mt-4">
+             <button id="test-me-btn" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-900 transition-all duration-200">✨ Test Me</button>
+        </div>
+    </div>
+
+    <!-- Quiz Modal -->
+    <div id="quiz-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content bg-white dark:bg-slate-800 w-full max-w-md p-6 rounded-2xl shadow-xl transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">Test Your Knowledge</h2>
+                <button id="close-modal-btn" class="text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 text-2xl leading-none">&times;</button>
+            </div>
+            <div id="quiz-content">
+                <!-- Quiz question and options will be injected here -->
+            </div>
+            <div id="quiz-loader" class="flex justify-center items-center h-40 hidden">
+                <div class="loader"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Generic Message Modal -->
+    <div id="message-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content bg-white dark:bg-slate-800 w-full max-w-sm p-6 rounded-2xl shadow-xl text-center">
+            <p id="message-text" class="text-slate-700 dark:text-slate-200 mb-4"></p>
+            <button id="close-message-btn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">OK</button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- DATA (will be loaded from JSON) ---
+        let flashcardData = [];
+
+        // --- DOM ELEMENT SELECTION ---
+        const welcomeScreen = document.getElementById('welcome-screen');
+        const deckUpload = document.getElementById('deck-upload');
+        const flashcardApp = document.querySelector('.flashcard-app');
+        
+        const flashcard = document.querySelector('.flashcard');
+        const cardFront = document.querySelector('.card-front');
+        const cardBackContent = document.getElementById('card-back-content');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const cardCounter = document.querySelector('.card-counter');
+        const deckTitle = document.getElementById('deck-title');
+        
+        const simplifyBtn = document.getElementById('simplify-btn');
+        const simplifiedContent = document.getElementById('simplified-content');
+        
+        const testMeBtn = document.getElementById('test-me-btn');
+        const quizModal = document.getElementById('quiz-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const quizContent = document.getElementById('quiz-content');
+        const quizLoader = document.getElementById('quiz-loader');
+
+        const messageModal = document.getElementById('message-modal');
+        const messageText = document.getElementById('message-text');
+        const closeMessageBtn = document.getElementById('close-message-btn');
+
+        // --- STATE MANAGEMENT ---
+        let currentCardIndex = 0;
+        let isFlipped = false;
+
+        // --- GEMINI API SETUP ---
+        const apiKey = ""; // Leave this as-is.
+
+        /**
+         * Shows a custom message modal.
+         * @param {string} message - The message to display.
+         */
+        function showMessage(message) {
+            messageText.textContent = message;
+            messageModal.classList.remove('hidden');
+        }
+
+        closeMessageBtn.addEventListener('click', () => {
+            messageModal.classList.add('hidden');
+        });
+
+        // --- FILE HANDLING & APP INITIALIZATION ---
+        deckUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data && data.cards && data.deckInfo && Array.isArray(data.cards) && data.cards.length > 0) {
+                        // A valid deck file is loaded
+                        flashcardData = data.cards;
+                        document.title = data.deckInfo.title;
+                        deckTitle.textContent = data.deckInfo.title;
+
+                        // Switch from welcome screen to the app
+                        welcomeScreen.classList.add('hidden');
+                        flashcardApp.classList.remove('hidden');
+                        
+                        // Initialize the app state
+                        currentCardIndex = 0;
+                        isFlipped = false;
+                        loadCard(currentCardIndex);
+                    } else {
+                        showMessage('Invalid JSON deck file. Make sure it has "deckInfo" and a non-empty "cards" array.');
+                    }
+                } catch (error) {
+                    showMessage('Error reading or parsing the JSON file. Please ensure it is a valid JSON.');
+                    console.error("JSON Parsing Error:", error);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        /**
+         * Calls the Gemini API with a given prompt and handles retries.
+         * @param {object} payload - The payload to send to the API.
+         * @returns {Promise<string|object|null>} The API response text/object or null on failure.
+         */
+        async function callGeminiAPI(payload) {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            let response = null;
+            let attempts = 0;
+            const maxAttempts = 5;
+            let delay = 1000;
+
+            while (attempts < maxAttempts) {
+                try {
+                    const fetchResponse = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (fetchResponse.ok) {
+                        response = await fetchResponse.json();
+                        break; // Success
+                    } else if (fetchResponse.status === 429) {
+                        // Throttled, wait and retry
+                        console.warn(`API call throttled. Retrying in ${delay / 1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Exponential backoff
+                        attempts++;
+                    } else {
+                        throw new Error(`API Error: ${fetchResponse.statusText}`);
+                    }
+                } catch (error) {
+                    console.error("Error calling Gemini API:", error);
+                    attempts++;
+                    if (attempts >= maxAttempts) {
+                        return null;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2;
+                }
+            }
+            
+            try {
+                if (payload.generationConfig?.responseMimeType === "application/json") {
+                    const jsonText = response?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    return JSON.parse(jsonText);
+                } else {
+                    return response?.candidates?.[0]?.content?.parts?.[0]?.text;
+                }
+            } catch (e) {
+                console.error("Error parsing API response:", e);
+                return null;
+            }
+        }
+
+        // --- CORE FUNCTIONS ---
+
+        /**
+         * Loads a card's content into the DOM.
+         * @param {number} index - The index of the card to load.
+         */
+        function loadCard(index) {
+            if (flashcardData.length === 0) return;
+            const cardData = flashcardData[index];
+            cardFront.innerHTML = cardData.front;
+            cardBackContent.innerHTML = cardData.back;
+            cardCounter.textContent = `Card ${index + 1} of ${flashcardData.length}`;
+            
+            // Reset AI features for the new card
+            simplifiedContent.classList.add('hidden');
+            simplifiedContent.innerHTML = '';
+            simplifyBtn.disabled = false;
+            simplifyBtn.textContent = '✨ Simplify Concept';
+
+            if (isFlipped) {
+                flashcard.classList.remove('is-flipped');
+                isFlipped = false;
+            }
+        }
+
+        /**
+         * Toggles the flip state of the card.
+         */
+        function flipCard() {
+            flashcard.classList.toggle('is-flipped');
+            isFlipped = !isFlipped;
+        }
+
+        // --- EVENT LISTENERS & AI FEATURE LOGIC ---
+
+        flashcard.addEventListener('click', flipCard);
+
+        nextBtn.addEventListener('click', () => {
+            currentCardIndex = (currentCardIndex + 1) % flashcardData.length;
+            loadCard(currentCardIndex);
+        });
+
+        prevBtn.addEventListener('click', () => {
+            currentCardIndex = (currentCardIndex < 1) ? flashcardData.length - 1 : currentCardIndex - 1;
+            loadCard(currentCardIndex);
+        });
+
+        simplifyBtn.addEventListener('click', async (e) => {
+            e.stopPropagation(); // Prevent card from flipping
+            const cardData = flashcardData[currentCardIndex];
+            
+            simplifyBtn.disabled = true;
+            simplifyBtn.textContent = 'Thinking...';
+            simplifiedContent.classList.remove('hidden');
+            simplifiedContent.innerHTML = '<div class="flex justify-center"><div class="loader"></div></div>';
+
+            const prompt = `Explain this concept to a 10-year-old in one or two simple sentences: "${cardData.concept}"`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const result = await callGeminiAPI(payload);
+
+            if (result) {
+                simplifiedContent.innerHTML = `<p>${result}</p>`;
+            } else {
+                simplifiedContent.innerHTML = '<p class="text-red-500">Sorry, I couldn\'t simplify this right now.</p>';
+            }
+            simplifyBtn.textContent = '✨ Simplify Concept'; // Keep disabled to prevent re-clicks
+        });
+        
+        testMeBtn.addEventListener('click', async () => {
+            quizModal.classList.remove('hidden');
+            quizModal.querySelector('.modal-content').classList.remove('scale-95');
+            quizContent.innerHTML = '';
+            quizLoader.classList.remove('hidden');
+
+            const cardData = flashcardData[currentCardIndex];
+            const prompt = `Based on the legal concept "${cardData.concept}", create one multiple-choice question to test understanding. Provide 3 incorrect answers and 1 correct answer. The correct answer should be a simple restatement or application of the concept. The incorrect answers should be plausible but clearly wrong.`;
+            
+            const payload = {
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: {
+                  responseMimeType: "application/json",
+                  responseSchema: {
+                      type: "OBJECT",
+                      properties: {
+                          "question": { "type": "STRING" },
+                          "options": { "type": "ARRAY", "items": { "type": "STRING" } },
+                          "correctAnswer": { "type": "STRING" }
+                      },
+                      required: ["question", "options", "correctAnswer"]
+                  }
+              }
+            };
+
+            const result = await callGeminiAPI(payload);
+            quizLoader.classList.add('hidden');
+
+            if (result && result.question) {
+                displayQuiz(result);
+            } else {
+                quizContent.innerHTML = '<p class="text-red-500 text-center">Sorry, I couldn\'t generate a quiz question right now. Please try again later.</p>';
+            }
+        });
+
+        function displayQuiz({ question, options, correctAnswer }) {
+            // Shuffle options to randomize position of correct answer
+            options.sort(() => Math.random() - 0.5);
+            
+            let optionsHtml = options.map(option => `
+                <div>
+                    <label class="flex items-center p-3 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer">
+                        <input type="radio" name="quizOption" value="${option}" class="mr-3">
+                        <span class="text-slate-700 dark:text-slate-300">${option}</span>
+                    </label>
+                </div>
+            `).join('');
+
+            quizContent.innerHTML = `
+                <p class="text-slate-800 dark:text-slate-200 mb-4">${question}</p>
+                <div class="space-y-3">${optionsHtml}</div>
+                <button id="submit-answer-btn" class="w-full mt-6 px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">Submit</button>
+                <div id="quiz-result" class="mt-4 text-center font-semibold"></div>
+            `;
+
+            document.getElementById('submit-answer-btn').addEventListener('click', () => {
+                const selectedOption = document.querySelector('input[name="quizOption"]:checked');
+                const resultDiv = document.getElementById('quiz-result');
+                if (!selectedOption) {
+                    resultDiv.textContent = 'Please select an answer.';
+                    resultDiv.className = 'mt-4 text-center font-semibold text-yellow-500';
+                    return;
+                }
+                
+                if (selectedOption.value === correctAnswer) {
+                    resultDiv.textContent = 'Correct!';
+                    resultDiv.className = 'mt-4 text-center font-semibold text-green-500';
+                } else {
+                    resultDiv.textContent = `Not quite. The correct answer is: "${correctAnswer}"`;
+                    resultDiv.className = 'mt-4 text-center font-semibold text-red-500';
+                }
+                // Disable further submissions
+                document.getElementById('submit-answer-btn').disabled = true;
+                document.querySelectorAll('input[name="quizOption"]').forEach(input => input.disabled = true);
+            });
+        }
+
+        closeModalBtn.addEventListener('click', () => {
+            quizModal.classList.add('hidden');
+            quizModal.querySelector('.modal-content').classList.add('scale-95');
+        });
+
+    </script>
+</body>
+</html>
