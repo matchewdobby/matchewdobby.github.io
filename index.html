@@ -23,32 +23,28 @@
         .is-flipped { transform: rotateY(180deg); }
         .modal-overlay { transition: opacity 0.3s ease; }
         .modal-content { transition: transform 0.3s ease; }
-        /* Simple hide class */
         .hidden { display: none; }
     </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 flex items-center justify-center min-h-screen p-4">
 
-    <!-- Deck Management Screen: Shown on initial load -->
+    <!-- Deck Management Screen -->
     <div id="deck-manager-screen" class="w-full max-w-2xl text-center p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
         <h1 class="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">My Decks</h1>
-        <div id="deck-list" class="space-y-3 mb-6 text-left">
-            <!-- Saved decks will be listed here -->
-        </div>
+        <div id="deck-list" class="space-y-3 mb-6 text-left"></div>
         <label for="deck-upload" class="cursor-pointer inline-block px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200">
             📂 Upload New Deck
         </label>
         <input type="file" id="deck-upload" class="hidden" accept=".json">
     </div>
 
-    <!-- Main Flashcard App: Initially hidden -->
+    <!-- Main Flashcard App -->
     <div id="flashcard-app" class="w-full max-w-2xl mx-auto text-center hidden">
         <div class="flex justify-between items-center mb-4">
             <button id="back-to-decks-btn" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-slate-600">&larr; My Decks</button>
             <h2 id="deck-title" class="text-xl font-bold text-slate-700 dark:text-slate-200"></h2>
             <p class="card-counter text-slate-600 dark:text-slate-400 font-semibold"></p>
         </div>
-
         <div class="flashcard-container w-full h-96 md:h-[450px] mb-6">
             <div class="flashcard relative w-full h-full cursor-pointer">
                 <div class="card-face card-front absolute w-full h-full flex items-center justify-center p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700"></div>
@@ -57,25 +53,22 @@
                 </div>
             </div>
         </div>
-
         <div class="navigation flex justify-center items-center space-x-4">
             <button id="prev-btn" class="px-6 py-3 bg-white dark:bg-slate-700 dark:text-slate-200 text-slate-700 font-bold rounded-lg shadow-md hover:bg-slate-50 dark:hover:bg-slate-600">&larr; Previous</button>
             <button id="next-btn" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700">Next &rarr;</button>
         </div>
         <div class="mt-4">
-             <button id="outline-view-btn" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700">📄 Outline View</button>
+            <button id="outline-view-btn" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700">📄 Outline View</button>
         </div>
     </div>
 
-    <!-- Outline View: Initially hidden -->
+    <!-- Outline View -->
     <div id="outline-view" class="w-full max-w-3xl mx-auto p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg hidden">
-         <div class="flex justify-between items-center mb-6">
+        <div class="flex justify-between items-center mb-6">
             <h2 id="outline-deck-title" class="text-2xl font-bold text-slate-800 dark:text-slate-100"></h2>
             <button id="back-to-flashcards-btn" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">Back to Cards &rarr;</button>
         </div>
-        <div id="outline-content" class="space-y-6">
-            <!-- Outline content injected here -->
-        </div>
+        <div id="outline-content" class="space-y-6"></div>
     </div>
     
     <!-- Generic Message Modal -->
@@ -85,7 +78,6 @@
             <button id="close-message-btn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">OK</button>
         </div>
     </div>
-
 
     <script>
         // --- DOM ELEMENT SELECTION ---
@@ -125,12 +117,9 @@
 
         // --- UI RENDERING & NAVIGATION ---
 
-        /**
-         * Renders the list of saved decks on the manager screen.
-         */
         function renderDeckList() {
             allDecks = getDecksFromStorage();
-            deckList.innerHTML = ''; // Clear existing list
+            deckList.innerHTML = '';
             if (Object.keys(allDecks).length === 0) {
                 deckList.innerHTML = '<p class="text-center text-slate-500 dark:text-slate-400">No decks saved yet. Upload one to get started!</p>';
                 return;
@@ -174,25 +163,43 @@
         }
 
         /**
-         * Populates the outline view with the current deck's content.
+         * NEW: Builds the HTML for the back of a card from structured data.
+         * @param {Array} backData - The array of sections for the card back.
+         * @returns {string} - The generated HTML string.
          */
+        function buildBackContentHTML(backData) {
+            let html = '';
+            backData.forEach(section => {
+                html += `<strong class="text-blue-800 dark:text-blue-300">${section.heading}:</strong>`;
+                if (Array.isArray(section.content)) {
+                    html += `<ul class="list-disc list-inside mt-1 mb-3">`;
+                    section.content.forEach(item => {
+                        html += `<li>${item}</li>`;
+                    });
+                    html += `</ul>`;
+                } else {
+                    html += `<p class="mt-1 mb-3">${section.content}</p>`;
+                }
+            });
+            return html;
+        }
+
         function renderOutlineContent() {
             const deck = allDecks[currentDeckId];
             if (!deck) return;
             
             outlineDeckTitle.textContent = deck.deckInfo.title;
-            outlineContent.innerHTML = ''; // Clear previous content
+            outlineContent.innerHTML = '';
 
             deck.cards.forEach(card => {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = card.front;
-                const frontText = tempDiv.textContent || 'Card Front';
-
                 const outlineItem = document.createElement('div');
                 outlineItem.className = 'p-4 border-l-4 border-indigo-500 bg-slate-50 dark:bg-slate-700 rounded-r-lg';
+                
+                const backHTML = buildBackContentHTML(card.back);
+
                 outlineItem.innerHTML = `
-                    <h4 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">${frontText}</h4>
-                    <div class="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-300">${card.back}</div>
+                    <h4 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">${card.front.title}</h4>
+                    <div class="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-300">${backHTML}</div>
                 `;
                 outlineContent.appendChild(outlineItem);
             });
@@ -200,10 +207,6 @@
 
         // --- CORE FUNCTIONS ---
 
-        /**
-         * Loads a specific deck and prepares the flashcard view.
-         * @param {string} deckId - The ID of the deck to study.
-         */
         function startStudySession(deckId) {
             currentDeckId = deckId;
             const deck = allDecks[deckId];
@@ -220,15 +223,37 @@
         }
 
         /**
-         * Loads a card's content into the DOM.
+         * MODIFIED: This function now builds the card content dynamically.
          * @param {number} index - The index of the card to load.
          */
         function loadCard(index) {
             const deck = allDecks[currentDeckId];
             if (!deck || deck.cards.length === 0) return;
             const cardData = deck.cards[index];
-            cardFront.innerHTML = cardData.front;
-            cardBackContent.innerHTML = cardData.back;
+
+            // --- Build Front of Card ---
+            cardFront.innerHTML = ''; // Clear previous content
+            const frontContainer = document.createElement('div');
+            frontContainer.className = 'text-center';
+
+            const titleElement = document.createElement('h3');
+            titleElement.className = 'text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2';
+            titleElement.textContent = cardData.front.title;
+
+            const subtitleElement = document.createElement('p');
+            subtitleElement.className = 'text-slate-600 dark:text-slate-300';
+            subtitleElement.textContent = cardData.front.subtitle;
+
+            frontContainer.appendChild(titleElement);
+            frontContainer.appendChild(subtitleElement);
+            cardFront.appendChild(frontContainer);
+
+            // --- Build Back of Card ---
+            cardBackContent.innerHTML = ''; // Clear previous content
+            const backHTML = buildBackContentHTML(cardData.back);
+            cardBackContent.innerHTML = backHTML;
+
+            // --- Update UI ---
             cardCounter.textContent = `Card ${index + 1} of ${deck.cards.length}`;
             if (isFlipped) {
                 flashcard.classList.remove('is-flipped');
@@ -256,11 +281,12 @@
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    if (data && data.cards && data.deckInfo && Array.isArray(data.cards) && data.cards.length > 0) {
-                        const deckId = data.deckInfo.title.replace(/\s+/g, '-') + '-' + Date.now();
+                    // Basic validation for the new structure
+                    if (data && data.deckInfo && Array.isArray(data.cards) && data.cards.length > 0 && data.cards[0].front && data.cards[0].back) {
+                        const deckId = data.deckInfo.title.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
                         allDecks = getDecksFromStorage();
-                        if (allDecks[deckId]) {
-                            showMessage('A deck with a very similar title already exists.');
+                         if (Object.values(allDecks).some(deck => deck.deckInfo.title === data.deckInfo.title)) {
+                            showMessage(`A deck named "${data.deckInfo.title}" already exists.`);
                             return;
                         }
                         allDecks[deckId] = data;
@@ -268,7 +294,7 @@
                         renderDeckList();
                         showMessage(`Deck "${data.deckInfo.title}" was added successfully!`);
                     } else {
-                        showMessage('Invalid JSON. Make sure it has "deckInfo" and a non-empty "cards" array.');
+                        showMessage('Invalid JSON structure. Please check the file format.');
                     }
                 } catch (error) {
                     showMessage('Error parsing JSON file. Please ensure it is valid.');
@@ -276,7 +302,7 @@
                 }
             };
             reader.readAsText(file);
-            event.target.value = ''; // Reset file input
+            event.target.value = '';
         });
 
         deckList.addEventListener('click', (event) => {
@@ -287,11 +313,26 @@
             if (target.classList.contains('study-btn')) {
                 startStudySession(deckId);
             } else if (target.classList.contains('delete-btn')) {
-                if (confirm(`Are you sure you want to delete the deck "${allDecks[deckId].deckInfo.title}"?`)) {
+                // Using a custom modal instead of confirm()
+                showMessage(`Are you sure you want to delete "${allDecks[deckId].deckInfo.title}"? This cannot be undone.`);
+                const modalContent = messageModal.querySelector('.modal-content');
+                
+                // Remove old buttons if they exist
+                const oldConfirmBtn = document.getElementById('confirm-delete-btn');
+                if(oldConfirmBtn) oldConfirmBtn.remove();
+                
+                const confirmBtn = document.createElement('button');
+                confirmBtn.id = 'confirm-delete-btn';
+                confirmBtn.textContent = 'Yes, Delete';
+                confirmBtn.className = 'px-6 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 mr-2';
+                confirmBtn.onclick = () => {
                     delete allDecks[deckId];
                     saveDecksToStorage(allDecks);
                     renderDeckList();
-                }
+                    messageModal.classList.add('hidden');
+                    modalContent.removeChild(confirmBtn); // Clean up
+                };
+                modalContent.appendChild(confirmBtn);
             }
         });
         
@@ -314,7 +355,11 @@
         backToDecksBtn.addEventListener('click', showDeckManager);
         outlineViewBtn.addEventListener('click', showOutlineView);
         backToFlashcardsBtn.addEventListener('click', showFlashcardApp);
-        closeMessageBtn.addEventListener('click', () => messageModal.classList.add('hidden'));
+        closeMessageBtn.addEventListener('click', () => {
+             const confirmBtn = document.getElementById('confirm-delete-btn');
+             if(confirmBtn) confirmBtn.remove(); // Clean up confirm button if it exists
+             messageModal.classList.add('hidden');
+        });
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
