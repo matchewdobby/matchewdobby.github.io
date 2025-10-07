@@ -3,369 +3,816 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flashcard Study App</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>Law Outline Quizzer</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .flashcard-container { perspective: 1200px; }
-        .flashcard {
-            transform-style: preserve-3d;
-            transition: transform 0.7s cubic-bezier(0.4, 0.2, 0.2, 1);
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
         }
-        .card-face {
-            backface-visibility: hidden;
-            -webkit-backface-visibility: hidden;
+        .hidden {
+            display: none;
         }
-        .card-back { transform: rotateY(180deg); }
-        .is-flipped { transform: rotateY(180deg); }
-        .modal-overlay { transition: opacity 0.3s ease; }
-        .modal-content { transition: transform 0.3s ease; }
-        .hidden { display: none; }
+        #editor {
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            min-height: 300px;
+            padding: 1rem;
+            background-color: white;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            line-height: 1.6;
+            flex-grow: 1;
+        }
+        #editor:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 2px #4f46e5;
+        }
+        #editor div, #editor p, #editor ul, #editor ol { margin-bottom: 0.5em; }
+        #editor ul, #editor ol { padding-left: 2em; }
+        .quiz-input {
+            border: 1px solid #9ca3af; border-radius: 0.375rem; padding: 2px 4px; margin: 0 2px;
+            background-color: #f9fafb; color: #111827; display: inline-block; vertical-align: baseline; line-height: normal;
+        }
+        .quiz-input:focus {
+            outline: 2px solid transparent; outline-offset: 2px; border-color: #4f46e5; box-shadow: 0 0 0 1px #4f46e5;
+        }
+        .quiz-input.correct { border-color: #16a34a; background-color: #f0fdf4; }
+        .quiz-input.incorrect { border-color: #dc2626; background-color: #fef2f2; }
+        .incorrect-word {
+            color: #dc2626; font-weight: 600; text-decoration: underline; text-decoration-color: #ef4444;
+            background-color: #fee2e2; padding: 2px; border-radius: 4px;
+            cursor: pointer;
+        }
+        .correct-word { color: #15803d; font-weight: 600; }
+        #history-container, #results-outline { line-height: 1.8; font-size: 0.95rem; color: #4b5563; }
+        #current-line-container { line-height: 1.8; font-size: 1.1rem; }
+        #save-btn:disabled { background-color: #a5b4fc; cursor: not-allowed; }
+        .outline-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .outline-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
     </style>
 </head>
-<body class="bg-slate-100 dark:bg-slate-900 flex items-center justify-center min-h-screen p-4">
+<body class="bg-gray-50 text-gray-800 flex min-h-screen">
+    <main id="main-content" class="flex-grow w-full">
+        <div id="app-container" class="w-full max-w-4xl mx-auto p-4 md:p-8 flex-grow flex flex-col">
 
-    <!-- Deck Management Screen -->
-    <div id="deck-manager-screen" class="w-full max-w-2xl text-center p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg">
-        <h1 class="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">My Decks</h1>
-        <div id="deck-list" class="space-y-3 mb-6 text-left"></div>
-        <label for="deck-upload" class="cursor-pointer inline-block px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200">
-            📂 Upload New Deck
-        </label>
-        <input type="file" id="deck-upload" class="hidden" accept=".json">
-    </div>
-
-    <!-- Main Flashcard App -->
-    <div id="flashcard-app" class="w-full max-w-2xl mx-auto text-center hidden">
-        <div class="flex justify-between items-center mb-4">
-            <button id="back-to-decks-btn" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-lg shadow-sm hover:bg-slate-300 dark:hover:bg-slate-600">&larr; My Decks</button>
-            <h2 id="deck-title" class="text-xl font-bold text-slate-700 dark:text-slate-200"></h2>
-            <p class="card-counter text-slate-600 dark:text-slate-400 font-semibold"></p>
-        </div>
-        <div class="flashcard-container w-full h-96 md:h-[450px] mb-6">
-            <div class="flashcard relative w-full h-full cursor-pointer">
-                <div class="card-face card-front absolute w-full h-full flex items-center justify-center p-6 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700"></div>
-                <div class="card-face card-back absolute w-full h-full flex flex-col p-6 bg-blue-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-600">
-                    <div class="card-back-content overflow-y-auto text-left h-full"></div>
+            <!-- Screen 0: Homepage -->
+            <div id="homepage-screen">
+                 <div class="text-center border-b pb-4 mb-8">
+                    <h1 class="text-4xl md:text-5xl font-bold text-gray-900">My Outlines</h1>
+                    <p class="mt-2 text-lg text-gray-600">Select an outline to study or create a new one.</p>
+                </div>
+                <div class="text-center mb-8">
+                    <button id="homepage-new-outline-btn" class="py-3 px-8 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                        + Create New Outline
+                    </button>
+                </div>
+                <div id="homepage-outline-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Outline cards will be dynamically inserted here -->
                 </div>
             </div>
-        </div>
-        <div class="navigation flex justify-center items-center space-x-4">
-            <button id="prev-btn" class="px-6 py-3 bg-white dark:bg-slate-700 dark:text-slate-200 text-slate-700 font-bold rounded-lg shadow-md hover:bg-slate-50 dark:hover:bg-slate-600">&larr; Previous</button>
-            <button id="next-btn" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700">Next &rarr;</button>
-        </div>
-        <div class="mt-4">
-            <button id="outline-view-btn" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700">📄 Outline View</button>
-        </div>
-    </div>
+            
+            <!-- Screen 1: Setup Screen -->
+            <div id="setup-screen" class="hidden space-y-6 flex flex-col flex-grow">
+                <div class="flex flex-wrap items-center justify-between border-b pb-4 gap-4">
+                     <input id="outline-title" type="text" class="text-3xl md:text-4xl font-bold text-gray-900 flex-grow bg-transparent p-2 rounded-lg focus:outline-none hover:bg-gray-100 focus:bg-gray-100 transition-colors">
+                     <div class="flex items-center gap-2">
+                         <button id="save-btn" class="flex items-center justify-center py-2 px-4 bg-indigo-500 text-white font-semibold rounded-lg shadow-sm hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200 whitespace-nowrap">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                            <span>Save</span>
+                        </button>
+                        <button id="save-home-btn" class="flex items-center justify-center py-2 px-4 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 whitespace-nowrap">
+                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                             <span>Save & Home</span>
+                        </button>
+                     </div>
+                </div>
+                <p class="mt-2 text-lg text-gray-600">Paste your content below, choose a difficulty, and start studying!</p>
+                <div id="editor" contenteditable="true" role="textbox" aria-multiline="true" class="prose max-w-none"></div>
+                <div>
+                    <h2 class="text-xl font-semibold text-center mb-4">Select Difficulty</h2>
+                    <div id="difficulty-buttons" class="flex justify-center gap-4">
+                        <button data-difficulty="0.25" class="difficulty-btn w-32 py-2 px-4 bg-white border border-gray-300 rounded-lg shadow-sm text-gray-700 font-medium hover:bg-gray-100">Easy (25%)</button>
+                        <button data-difficulty="0.50" class="difficulty-btn w-32 py-2 px-4 bg-white border border-gray-300 rounded-lg shadow-sm text-gray-700 font-medium hover:bg-gray-100">Medium (50%)</button>
+                        <button data-difficulty="0.75" class="difficulty-btn w-32 py-2 px-4 bg-white border border-gray-300 rounded-lg shadow-sm text-gray-700 font-medium hover:bg-gray-100">Hard (75%)</button>
+                    </div>
+                </div>
+                <div class="text-center pt-4">
+                    <button id="start-quiz-btn" class="w-full md:w-auto py-3 px-12 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-gray-400" disabled>Select a difficulty</button>
+                    <p id="quiz-start-warning" class="text-red-500 mt-2 h-4"></p>
+                </div>
+            </div>
 
-    <!-- Outline View -->
-    <div id="outline-view" class="w-full max-w-3xl mx-auto p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-lg hidden">
-        <div class="flex justify-between items-center mb-6">
-            <h2 id="outline-deck-title" class="text-2xl font-bold text-slate-800 dark:text-slate-100"></h2>
-            <button id="back-to-flashcards-btn" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">Back to Cards &rarr;</button>
+            <!-- Screen 2: Quiz Screen -->
+            <div id="quiz-screen" class="hidden space-y-8">
+                <div class="flex justify-between items-center gap-3">
+                    <button id="quiz-home-btn" class="py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-sm hover:bg-gray-300">&larr; Home</button>
+                    <div id="progress-indicator" class="text-center text-lg font-medium text-gray-600 flex-1"></div>
+                    <div class="flex items-center gap-2">
+                        <button id="quiz-save-btn" class="flex items-center justify-center py-2 px-4 bg-indigo-500 text-white font-semibold rounded-lg shadow-sm hover:bg-indigo-600 disabled:bg-indigo-300 transition-all duration-200 whitespace-nowrap" disabled>
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                            <span>Save</span>
+                        </button>
+                        <button id="quiz-save-home-btn" class="flex items-center justify-center py-2 px-4 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 transition-all duration-200 whitespace-nowrap">
+                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                             <span>Save & Home</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <div id="history-container" class="space-y-2 pb-6 border-b border-gray-200 mb-6"></div>
+                    <div id="current-line-wrapper" class="flex items-center gap-4"><div id="current-line-container" class="flex-grow"></div></div>
+                </div>
+                 <div id="score-display" class="text-center text-xl font-bold text-gray-700">Score: 0 / 0</div>
+            </div>
+
+            <!-- Screen 3: Results Screen -->
+            <div id="results-screen" class="hidden space-y-6 text-center">
+                 <button id="results-home-btn" class="absolute top-8 left-8 py-2 px-4 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-sm hover:bg-gray-300">&larr; Home</button>
+                 <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Quiz Complete!</h1>
+                <div id="final-score" class="text-2xl font-bold"></div>
+                <div class="bg-white p-6 rounded-lg shadow-lg text-left">
+                    <h2 class="text-xl font-semibold mb-4 border-b pb-2">Your Corrected Outline:</h2>
+                    <div id="results-outline"></div>
+                </div>
+                <button id="restart-btn" class="py-3 px-12 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">Study Again</button>
+            </div>
         </div>
-        <div id="outline-content" class="space-y-6"></div>
+    </main>
+    
+    <div id="hint-container" class="hidden fixed right-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 z-20">
+      <button id="hint-btn" class="w-10 h-10 bg-amber-500 text-white font-bold rounded-full shadow-lg hover:bg-amber-600 flex items-center justify-center text-lg" title="Hint letter">H</button>
+      <button id="reveal-btn" class="w-10 h-10 bg-red-500 text-white font-bold rounded-full shadow-lg hover:bg-red-600 flex items-center justify-center text-lg" title="Reveal word">R</button>
     </div>
     
-    <!-- Generic Message Modal -->
-    <div id="message-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
-        <div class="modal-content bg-white dark:bg-slate-800 w-full max-w-sm p-6 rounded-2xl shadow-xl text-center">
-            <p id="message-text" class="text-slate-700 dark:text-slate-200 mb-4"></p>
-            <button id="close-message-btn" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700">OK</button>
+    <div id="delete-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 h-full w-full flex items-center justify-center z-50">
+      <div class="relative mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+          <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+             <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+          </div>
+          <h3 class="text-lg leading-6 font-medium text-gray-900 mt-2">Delete Outline</h3>
+          <div class="mt-2 px-7 py-3"><p class="text-sm text-gray-500">Are you sure? This action cannot be undone.</p></div>
+          <div class="items-center px-4 py-3">
+            <button id="confirm-delete-btn" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-700">Delete</button>
+            <button id="cancel-delete-btn" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 ml-2">Cancel</button>
+          </div>
         </div>
+      </div>
     </div>
 
     <script>
-        // --- DOM ELEMENT SELECTION ---
-        const deckManagerScreen = document.getElementById('deck-manager-screen');
-        const deckList = document.getElementById('deck-list');
-        const deckUpload = document.getElementById('deck-upload');
-        
-        const flashcardApp = document.getElementById('flashcard-app');
-        const flashcard = document.querySelector('.flashcard');
-        const cardFront = document.querySelector('.card-front');
-        const cardBackContent = document.querySelector('.card-back-content');
-        const prevBtn = document.getElementById('prev-btn');
-        const nextBtn = document.getElementById('next-btn');
-        const cardCounter = document.querySelector('.card-counter');
-        const deckTitle = document.getElementById('deck-title');
-        const backToDecksBtn = document.getElementById('back-to-decks-btn');
-        const outlineViewBtn = document.getElementById('outline-view-btn');
-
-        const outlineView = document.getElementById('outline-view');
-        const outlineDeckTitle = document.getElementById('outline-deck-title');
-        const outlineContent = document.getElementById('outline-content');
-        const backToFlashcardsBtn = document.getElementById('back-to-flashcards-btn');
-
-        const messageModal = document.getElementById('message-modal');
-        const messageText = document.getElementById('message-text');
-        const closeMessageBtn = document.getElementById('close-message-btn');
-
-        // --- STATE MANAGEMENT ---
-        let allDecks = {};
-        let currentDeckId = null;
-        let currentCardIndex = 0;
-        let isFlipped = false;
-
-        // --- LOCAL STORAGE FUNCTIONS ---
-        const getDecksFromStorage = () => JSON.parse(localStorage.getItem('flashcardDecks') || '{}');
-        const saveDecksToStorage = (decks) => localStorage.setItem('flashcardDecks', JSON.stringify(decks));
-
-        // --- UI RENDERING & NAVIGATION ---
-
-        function renderDeckList() {
-            allDecks = getDecksFromStorage();
-            deckList.innerHTML = '';
-            if (Object.keys(allDecks).length === 0) {
-                deckList.innerHTML = '<p class="text-center text-slate-500 dark:text-slate-400">No decks saved yet. Upload one to get started!</p>';
-                return;
-            }
-            for (const deckId in allDecks) {
-                const deck = allDecks[deckId];
-                const deckElement = document.createElement('div');
-                deckElement.className = 'flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-700 rounded-lg';
-                deckElement.innerHTML = `
-                    <div>
-                        <h3 class="font-bold text-slate-800 dark:text-slate-100">${deck.deckInfo.title}</h3>
-                        <p class="text-sm text-slate-500 dark:text-slate-400">${deck.cards.length} cards</p>
-                    </div>
-                    <div class="flex space-x-2">
-                        <button class="study-btn px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-sm hover:bg-green-600" data-deck-id="${deckId}">Study</button>
-                        <button class="delete-btn px-4 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-sm hover:bg-red-600" data-deck-id="${deckId}">Delete</button>
-                    </div>
-                `;
-                deckList.appendChild(deckElement);
-            }
-        }
-
-        function showDeckManager() {
-            deckManagerScreen.classList.remove('hidden');
-            flashcardApp.classList.add('hidden');
-            outlineView.classList.add('hidden');
-            renderDeckList();
-        }
-
-        function showFlashcardApp() {
-            flashcardApp.classList.remove('hidden');
-            deckManagerScreen.classList.add('hidden');
-            outlineView.classList.add('hidden');
-        }
-        
-        function showOutlineView() {
-            outlineView.classList.remove('hidden');
-            flashcardApp.classList.add('hidden');
-            deckManagerScreen.classList.add('hidden');
-            renderOutlineContent();
-        }
-
-        /**
-         * NEW: Builds the HTML for the back of a card from structured data.
-         * @param {Array} backData - The array of sections for the card back.
-         * @returns {string} - The generated HTML string.
-         */
-        function buildBackContentHTML(backData) {
-            let html = '';
-            backData.forEach(section => {
-                html += `<strong class="text-blue-800 dark:text-blue-300">${section.heading}:</strong>`;
-                if (Array.isArray(section.content)) {
-                    html += `<ul class="list-disc list-inside mt-1 mb-3">`;
-                    section.content.forEach(item => {
-                        html += `<li>${item}</li>`;
-                    });
-                    html += `</ul>`;
-                } else {
-                    html += `<p class="mt-1 mb-3">${section.content}</p>`;
-                }
-            });
-            return html;
-        }
-
-        function renderOutlineContent() {
-            const deck = allDecks[currentDeckId];
-            if (!deck) return;
-            
-            outlineDeckTitle.textContent = deck.deckInfo.title;
-            outlineContent.innerHTML = '';
-
-            deck.cards.forEach(card => {
-                const outlineItem = document.createElement('div');
-                outlineItem.className = 'p-4 border-l-4 border-indigo-500 bg-slate-50 dark:bg-slate-700 rounded-r-lg';
-                
-                const backHTML = buildBackContentHTML(card.back);
-
-                outlineItem.innerHTML = `
-                    <h4 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">${card.front.title}</h4>
-                    <div class="prose prose-sm dark:prose-invert max-w-none text-slate-600 dark:text-slate-300">${backHTML}</div>
-                `;
-                outlineContent.appendChild(outlineItem);
-            });
-        }
-
-        // --- CORE FUNCTIONS ---
-
-        function startStudySession(deckId) {
-            currentDeckId = deckId;
-            const deck = allDecks[deckId];
-            if (!deck) {
-                showMessage('Could not find the selected deck.');
-                showDeckManager();
-                return;
-            }
-            deckTitle.textContent = deck.deckInfo.title;
-            currentCardIndex = 0;
-            isFlipped = false;
-            loadCard(currentCardIndex);
-            showFlashcardApp();
-        }
-
-        /**
-         * MODIFIED: This function now builds the card content dynamically.
-         * @param {number} index - The index of the card to load.
-         */
-        function loadCard(index) {
-            const deck = allDecks[currentDeckId];
-            if (!deck || deck.cards.length === 0) return;
-            const cardData = deck.cards[index];
-
-            // --- Build Front of Card ---
-            cardFront.innerHTML = ''; // Clear previous content
-            const frontContainer = document.createElement('div');
-            frontContainer.className = 'text-center';
-
-            const titleElement = document.createElement('h3');
-            titleElement.className = 'text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2';
-            titleElement.textContent = cardData.front.title;
-
-            const subtitleElement = document.createElement('p');
-            subtitleElement.className = 'text-slate-600 dark:text-slate-300';
-            subtitleElement.textContent = cardData.front.subtitle;
-
-            frontContainer.appendChild(titleElement);
-            frontContainer.appendChild(subtitleElement);
-            cardFront.appendChild(frontContainer);
-
-            // --- Build Back of Card ---
-            cardBackContent.innerHTML = ''; // Clear previous content
-            const backHTML = buildBackContentHTML(cardData.back);
-            cardBackContent.innerHTML = backHTML;
-
-            // --- Update UI ---
-            cardCounter.textContent = `Card ${index + 1} of ${deck.cards.length}`;
-            if (isFlipped) {
-                flashcard.classList.remove('is-flipped');
-                isFlipped = false;
-            }
-        }
-
-        function flipCard() {
-            flashcard.classList.toggle('is-flipped');
-            isFlipped = !isFlipped;
-        }
-        
-        function showMessage(message) {
-            messageText.textContent = message;
-            messageModal.classList.remove('hidden');
-        }
-
-        // --- EVENT LISTENERS ---
-
-        deckUpload.addEventListener('change', (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    // Basic validation for the new structure
-                    if (data && data.deckInfo && Array.isArray(data.cards) && data.cards.length > 0 && data.cards[0].front && data.cards[0].back) {
-                        const deckId = data.deckInfo.title.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
-                        allDecks = getDecksFromStorage();
-                         if (Object.values(allDecks).some(deck => deck.deckInfo.title === data.deckInfo.title)) {
-                            showMessage(`A deck named "${data.deckInfo.title}" already exists.`);
-                            return;
-                        }
-                        allDecks[deckId] = data;
-                        saveDecksToStorage(allDecks);
-                        renderDeckList();
-                        showMessage(`Deck "${data.deckInfo.title}" was added successfully!`);
-                    } else {
-                        showMessage('Invalid JSON structure. Please check the file format.');
-                    }
-                } catch (error) {
-                    showMessage('Error parsing JSON file. Please ensure it is valid.');
-                    console.error("JSON Parsing Error:", error);
-                }
-            };
-            reader.readAsText(file);
-            event.target.value = '';
-        });
-
-        deckList.addEventListener('click', (event) => {
-            const target = event.target;
-            const deckId = target.dataset.deckId;
-            if (!deckId) return;
-
-            if (target.classList.contains('study-btn')) {
-                startStudySession(deckId);
-            } else if (target.classList.contains('delete-btn')) {
-                // Using a custom modal instead of confirm()
-                showMessage(`Are you sure you want to delete "${allDecks[deckId].deckInfo.title}"? This cannot be undone.`);
-                const modalContent = messageModal.querySelector('.modal-content');
-                
-                // Remove old buttons if they exist
-                const oldConfirmBtn = document.getElementById('confirm-delete-btn');
-                if(oldConfirmBtn) oldConfirmBtn.remove();
-                
-                const confirmBtn = document.createElement('button');
-                confirmBtn.id = 'confirm-delete-btn';
-                confirmBtn.textContent = 'Yes, Delete';
-                confirmBtn.className = 'px-6 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 mr-2';
-                confirmBtn.onclick = () => {
-                    delete allDecks[deckId];
-                    saveDecksToStorage(allDecks);
-                    renderDeckList();
-                    messageModal.classList.add('hidden');
-                    modalContent.removeChild(confirmBtn); // Clean up
-                };
-                modalContent.appendChild(confirmBtn);
-            }
-        });
-        
-        flashcard.addEventListener('click', flipCard);
-        
-        nextBtn.addEventListener('click', () => {
-            const deck = allDecks[currentDeckId];
-            if (!deck) return;
-            currentCardIndex = (currentCardIndex + 1) % deck.cards.length;
-            loadCard(currentCardIndex);
-        });
-
-        prevBtn.addEventListener('click', () => {
-            const deck = allDecks[currentDeckId];
-            if (!deck) return;
-            currentCardIndex = (currentCardIndex < 1) ? deck.cards.length - 1 : currentCardIndex - 1;
-            loadCard(currentCardIndex);
-        });
-
-        backToDecksBtn.addEventListener('click', showDeckManager);
-        outlineViewBtn.addEventListener('click', showOutlineView);
-        backToFlashcardsBtn.addEventListener('click', showFlashcardApp);
-        closeMessageBtn.addEventListener('click', () => {
-             const confirmBtn = document.getElementById('confirm-delete-btn');
-             if(confirmBtn) confirmBtn.remove(); // Clean up confirm button if it exists
-             messageModal.classList.add('hidden');
-        });
-
-        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
-            showDeckManager();
-        });
+            // --- STATE MANAGEMENT ---
+            let difficulty = 0, outlineLines = [], currentLineIndex = 0, totalBlanks = 0;
+            let correctAnswers = 0, lastFocusedInput = null, outlines = {}, activeOutlineId = null;
+            let hasUnsavedChanges = false, outlineToDelete = null, blanksAnswered = 0;
+            
+            const screens = ['homepage-screen', 'setup-screen', 'quiz-screen', 'results-screen'];
 
+            // --- DOM ELEMENT REFERENCES ---
+            const allElements = {
+                homepageScreen: document.getElementById('homepage-screen'),
+                setupScreen: document.getElementById('setup-screen'),
+                quizScreen: document.getElementById('quiz-screen'),
+                resultsScreen: document.getElementById('results-screen'),
+                editor: document.getElementById('editor'),
+                difficultyButtons: document.getElementById('difficulty-buttons'),
+                startQuizBtn: document.getElementById('start-quiz-btn'),
+                hintBtn: document.getElementById('hint-btn'),
+                hintContainer: document.getElementById('hint-container'),
+                revealBtn: document.getElementById('reveal-btn'),
+                restartBtn: document.getElementById('restart-btn'),
+                historyContainer: document.getElementById('history-container'),
+                currentLineContainer: document.getElementById('current-line-container'),
+                scoreDisplay: document.getElementById('score-display'),
+                finalScoreDisplay: document.getElementById('final-score'),
+                resultsOutline: document.getElementById('results-outline'),
+                progressIndicator: document.getElementById('progress-indicator'),
+                homepageNewOutlineBtn: document.getElementById('homepage-new-outline-btn'),
+                homepageOutlineList: document.getElementById('homepage-outline-list'),
+                outlineTitle: document.getElementById('outline-title'),
+                saveBtn: document.getElementById('save-btn'),
+                saveHomeBtn: document.getElementById('save-home-btn'),
+                quizHomeBtn: document.getElementById('quiz-home-btn'),
+                quizSaveBtn: document.getElementById('quiz-save-btn'),
+                quizSaveHomeBtn: document.getElementById('quiz-save-home-btn'),
+                resultsHomeBtn: document.getElementById('results-home-btn'),
+                deleteModal: document.getElementById('delete-modal'),
+                confirmDeleteBtn: document.getElementById('confirm-delete-btn'),
+                cancelDeleteBtn: document.getElementById('cancel-delete-btn'),
+            };
+
+            // A set of common English "stop words" to avoid blanking out.
+            const STOP_WORDS = new Set([
+                'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', "aren't", 'as', 'at',
+                'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by',
+                'can', "can't", 'cannot', 'could', "couldn't", 'did', "didn't", 'do', 'does', "doesn't", 'doing', "don't", 'down', 'during',
+                'each', 'few', 'for', 'from', 'further',
+                'had', "hadn't", 'has', "hasn't", 'have', "haven't", 'having', 'he', "he'd", "he'll", "he's", 'her', 'here', "here's", 'hers', 'herself', 'him', 'himself', 'his', 'how', "how's",
+                'i', "i'd", "i'll", "i'm", "i've", 'if', 'in', 'into', 'is', "isn't", 'it', "it's", 'its', 'itself',
+                "let's", 'me', 'more', 'most', "mustn't", 'my', 'myself',
+                'no', 'nor', 'not', 'of', 'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own',
+                'same', "shan't", 'she', "she'd", "she'll", "she's", 'should', "shouldn't", 'so', 'some', 'such',
+                'than', 'that', "that's", 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', "there's", 'these', 'they', "they'd", "they'll", "they're", "they've", 'this', 'those', 'through', 'to', 'too',
+                'under', 'until', 'up',
+                'very',
+                'was', "wasn't", 'we', "we'd", "we'll", "we're", "we've", 'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while', 'who', "who's", 'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't",
+                'you', "you'd", "you'll", "you're", "you've", 'your', 'yours', 'yourself', 'yourselves'
+            ]);
+
+            // --- INITIALIZATION ---
+            function initialize() {
+                loadStateFromStorage();
+                renderHomepage();
+                setupEventListeners();
+                showScreen('homepage-screen');
+            }
+
+            // --- SCREEN MANAGEMENT ---
+            function showScreen(screenId) {
+                screens.forEach(id => {
+                    const screenElement = document.getElementById(id);
+                    if (screenElement) {
+                        screenElement.classList.toggle('hidden', id !== screenId);
+                    }
+                });
+                if (screenId === 'setup-screen') updateSaveButtonUI(hasUnsavedChanges ? 'unsaved' : 'idle');
+            }
+
+            // --- EVENT LISTENERS ---
+            function setupEventListeners() {
+                allElements.difficultyButtons.addEventListener('click', handleDifficultySelection);
+                allElements.startQuizBtn.addEventListener('click', startQuiz);
+                allElements.hintBtn.addEventListener('click', () => { giveHint(); if(lastFocusedInput && !lastFocusedInput.disabled) lastFocusedInput.focus(); });
+                allElements.revealBtn.addEventListener('click', () => { revealWord(); });
+                allElements.restartBtn.addEventListener('click', () => showScreen('setup-screen'));
+                allElements.homepageNewOutlineBtn.addEventListener('click', () => { createNewOutline(); showScreen('setup-screen'); });
+                allElements.homepageOutlineList.addEventListener('click', handleHomepageListClick);
+                allElements.saveBtn.addEventListener('click', saveStateToStorage);
+                allElements.saveHomeBtn.addEventListener('click', () => { saveStateToStorage(true); });
+                allElements.quizHomeBtn.addEventListener('click', goHome);
+                if (allElements.quizSaveBtn) allElements.quizSaveBtn.addEventListener('click', () => saveQuizProgress());
+                if (allElements.quizSaveHomeBtn) allElements.quizSaveHomeBtn.addEventListener('click', () => saveQuizProgress(true));
+                allElements.resultsHomeBtn.addEventListener('click', goHome);
+                allElements.outlineTitle.addEventListener('input', markAsUnsaved);
+                allElements.editor.addEventListener('input', markAsUnsaved);
+                allElements.confirmDeleteBtn.addEventListener('click', executeDelete);
+                allElements.cancelDeleteBtn.addEventListener('click', () => allElements.deleteModal.classList.add('hidden'));
+
+                // Toggle incorrect word between correct text and user's answer
+                allElements.historyContainer.addEventListener('click', e => {
+                    const span = e.target.closest('span.incorrect-word');
+                    if (!span) return;
+                    const show = span.dataset.show === 'user' ? 'correct' : 'user';
+                    span.dataset.show = show;
+                    span.textContent = show === 'user' ? (span.dataset.user || '') : (span.dataset.correct || '');
+                });
+                allElements.resultsOutline.addEventListener('click', e => {
+                    const span = e.target.closest('span.incorrect-word');
+                    if (!span) return;
+                    const show = span.dataset.show === 'user' ? 'correct' : 'user';
+                    span.dataset.show = show;
+                    span.textContent = show === 'user' ? (span.dataset.user || '') : (span.dataset.correct || '');
+                });
+
+                document.addEventListener('focusin', e => { if (e.target.matches('.quiz-input')) { lastFocusedInput = e.target; } });
+                document.addEventListener('keydown', e => {
+                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'h') { e.preventDefault(); giveHint(); }
+                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+                        e.preventDefault();
+                        const onQuiz = !allElements.quizScreen.classList.contains('hidden');
+                        if (onQuiz) saveQuizProgress(); else saveStateToStorage();
+                    }
+                });
+            }
+
+            // --- NAVIGATION ---
+            function goHome() {
+                resetQuizState();
+                renderHomepage();
+                showScreen('homepage-screen');
+            }
+
+            // --- DATA & STATE MANAGEMENT ---
+            function loadStateFromStorage() {
+                outlines = JSON.parse(localStorage.getItem('lawOutlines') || '{}');
+                activeOutlineId = localStorage.getItem('activeOutlineId');
+                if (Object.keys(outlines).length === 0) createNewOutline("My First Outline", false);
+            }
+            
+            function markAsUnsaved() { if (!hasUnsavedChanges) { hasUnsavedChanges = true; updateSaveButtonUI('unsaved'); } }
+            
+            function updateSaveButtonUI(state) {
+                 const icons = {
+                    saving: `<svg class="w-5 h-5 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9a9 9 0 0114.13-5.22M20 15a9 9 0 01-14.13 5.22"></path></svg>`,
+                    saved: `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`,
+                    default: `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>`
+                };
+                const btn = allElements.saveBtn;
+                btn.disabled = false;
+                btn.classList.remove('bg-indigo-500', 'bg-yellow-500', 'bg-green-500');
+
+                switch(state) {
+                    case 'unsaved': btn.innerHTML = icons.default + '<span>Save</span>'; btn.classList.add('bg-yellow-500'); break;
+                    case 'saving': btn.disabled = true; btn.innerHTML = icons.saving + '<span>Saving...</span>'; btn.classList.add('bg-indigo-500'); break;
+                    case 'saved': btn.disabled = true; btn.innerHTML = icons.saved + '<span>Saved!</span>'; btn.classList.add('bg-green-500'); setTimeout(() => updateSaveButtonUI('idle'), 1500); break;
+                    default: btn.disabled = true; btn.innerHTML = icons.default + '<span>Save</span>'; btn.classList.add('bg-indigo-500'); break;
+                }
+            }
+            
+            function saveStateToStorage(goHomeAfter = false) {
+                if (!activeOutlineId || !hasUnsavedChanges) {
+                    if (goHomeAfter) goHome();
+                    return;
+                }
+                updateSaveButtonUI('saving');
+                setTimeout(() => {
+                    outlines[activeOutlineId].title = allElements.outlineTitle.value;
+                    outlines[activeOutlineId].content = allElements.editor.innerHTML;
+                    localStorage.setItem('lawOutlines', JSON.stringify(outlines));
+                    hasUnsavedChanges = false;
+                    updateSaveButtonUI('saved');
+                    if (goHomeAfter) {
+                        setTimeout(() => goHome(), 500);
+                    }
+                }, 500);
+            }
+
+            // --- HOMEPAGE & OUTLINE MANAGEMENT ---
+            function renderHomepage() {
+                allElements.homepageOutlineList.innerHTML = '';
+                Object.keys(outlines).forEach(id => {
+                    const outline = outlines[id];
+                    const card = document.createElement('div');
+                    card.className = 'outline-card bg-white p-4 rounded-lg shadow-md border cursor-pointer';
+                    card.dataset.id = id;
+                    card.dataset.action = 'edit';
+                    
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = outline.content;
+                    const previewText = tempDiv.textContent.trim().substring(0, 100) + '...';
+
+                    card.innerHTML = `
+                        <h3 class="font-bold text-lg text-gray-800 truncate mb-2">${outline.title}</h3>
+                        <p class="text-sm text-gray-600 mb-4">${previewText}</p>
+                        <div class="text-right">
+                            <button data-action="delete" data-id="${id}" class="text-red-500 hover:text-red-700 text-sm font-semibold">Delete</button>
+                        </div>
+                    `;
+                    allElements.homepageOutlineList.appendChild(card);
+                });
+            }
+
+            function handleHomepageListClick(e) {
+                const target = e.target;
+                const action = target.dataset.action;
+                const id = target.closest('.outline-card')?.dataset.id || target.dataset.id;
+                if (!id) return;
+                
+                if (action === 'delete') {
+                    outlineToDelete = id;
+                    allElements.deleteModal.classList.remove('hidden');
+                } else if (action === 'edit') {
+                    setActiveOutline(id);
+                    const q = outlines[id]?.quiz;
+                    if (q && typeof q.currentLineIndex === 'number') {
+                        loadQuizProgress(id);
+                    } else {
+                        showScreen('setup-screen');
+                    }
+                }
+            }
+
+            function createNewOutline(defaultTitle = "Untitled Outline", doSave = true) {
+                const newId = `outline_${Date.now()}`;
+                outlines[newId] = { title: defaultTitle, content: `<p>Start writing here...</p>` };
+                setActiveOutline(newId);
+                hasUnsavedChanges = true;
+                if (doSave) saveStateToStorage();
+            }
+
+            function setActiveOutline(id) {
+                if (!outlines[id]) return;
+                activeOutlineId = id;
+                localStorage.setItem('activeOutlineId', id);
+                const outline = outlines[id];
+                allElements.outlineTitle.value = outline.title;
+                allElements.editor.innerHTML = outline.content;
+                hasUnsavedChanges = false;
+            }
+
+            function executeDelete() {
+                if (!outlineToDelete) return;
+                delete outlines[outlineToDelete];
+                localStorage.setItem('lawOutlines', JSON.stringify(outlines));
+                renderHomepage();
+                outlineToDelete = null;
+                allElements.deleteModal.classList.add('hidden');
+            }
+
+            // --- QUIZ LOGIC ---
+            let quizHasUnsavedChanges = false;
+
+            function resetQuizState() {
+                difficulty = 0; outlineLines = []; currentLineIndex = 0; totalBlanks = 0;
+                correctAnswers = 0; blanksAnswered = 0;
+                allElements.historyContainer.innerHTML = ''; allElements.currentLineContainer.innerHTML = ''; allElements.resultsOutline.innerHTML = '';
+                updateScore();
+                document.querySelectorAll('.difficulty-btn').forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+                allElements.startQuizBtn.disabled = true; allElements.startQuizBtn.textContent = 'Select a difficulty';
+                if (allElements.hintContainer) allElements.hintContainer.classList.add('hidden');
+                quizHasUnsavedChanges = false; updateQuizSaveButtonUI('idle');
+            }
+            
+            function handleDifficultySelection(e) {
+                const button = e.target.closest('.difficulty-btn');
+                if (!button) return;
+                difficulty = parseFloat(button.dataset.difficulty);
+                document.querySelectorAll('.difficulty-btn').forEach(btn => btn.classList.remove('bg-indigo-600', 'text-white'));
+                button.classList.add('bg-indigo-600', 'text-white');
+                allElements.startQuizBtn.disabled = false;
+                allElements.startQuizBtn.textContent = 'Start Quiz';
+            }
+            
+            function startQuiz() {
+                const warningEl = document.getElementById('quiz-start-warning');
+                warningEl.textContent = '';
+                if (hasUnsavedChanges) {
+                    warningEl.textContent = "Please save your changes before starting.";
+                    setTimeout(() => { warningEl.textContent = ''; }, 3000);
+                    return;
+                }
+                
+                if (difficulty === 0) {
+                    warningEl.textContent = "Please select a difficulty.";
+                    setTimeout(() => { warningEl.textContent = ''; }, 3000);
+                    return;
+                }
+
+                // Reset only the state for the quiz run itself.
+                outlineLines = [];
+                currentLineIndex = 0;
+                totalBlanks = 0;
+                correctAnswers = 0;
+                blanksAnswered = 0;
+                allElements.historyContainer.innerHTML = '';
+                allElements.currentLineContainer.innerHTML = '';
+                allElements.resultsOutline.innerHTML = '';
+                updateScore();
+                if (allElements.hintContainer) allElements.hintContainer.classList.remove('hidden');
+                quizHasUnsavedChanges = true; updateQuizSaveButtonUI('unsaved');
+
+                parseOutline();
+
+                if (outlineLines.length === 0 || totalBlanks === 0) {
+                    warningEl.textContent = "No valid words to quiz on. Try different content or check for parentheses.";
+                    setTimeout(() => { warningEl.textContent = ''; }, 3000);
+                    // Reset the quiz state as it failed to start
+                    if (allElements.hintContainer) allElements.hintContainer.classList.add('hidden');
+                    return;
+                }
+                showScreen('quiz-screen');
+                updateProgressIndicator();
+                loadLine(currentLineIndex);
+            }
+
+            function updateProgressIndicator() {
+                if (totalBlanks > 0) allElements.progressIndicator.textContent = `Answering blank ${blanksAnswered + 1} of ${totalBlanks}`;
+            }
+
+            function parseOutline() { /* will be implemented below */ }
+            function loadLine(index) { /* will be implemented below */ }
+            function handleInputKeyDown(e) { /* will be implemented below */ }
+            function findNextInput(currentInput) { /* will be implemented below */ }
+            function positionHintButton(inputElement) { /* will be implemented below */ }
+            function escapeHtml(str) { return document.createElement('div').appendChild(document.createTextNode(str)).parentNode.innerHTML; }
+            function stripPunctuation(str) { return str.replace(/[.,/#!$%^&*;:{}=\-_`~()§]/g,""); }
+            
+            // Core logic for parsing and creating quiz lines
+            parseOutline = function() {
+                const content = outlines[activeOutlineId].content;
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = content;
+                outlineLines = Array.from(tempDiv.children).map(el => {
+                    const lineHTML = el.outerHTML;
+                    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+                    let textNodes = []; let node; while(node = walker.nextNode()) textNodes.push(node);
+                    const wordData = textNodes.flatMap(n => n.textContent.split(/(\s+)/)).filter(text => text.trim().length > 0);
+                    let inParen = false;
+                    const wordsWithState = wordData.map(text => {
+                         const startsParen = text.startsWith('('), endsParen = text.endsWith(')');
+                         const cleanWord = stripPunctuation(text).toLowerCase();
+                         // Word is blankable if not in parentheses, not a stop word, and longer than 1 character.
+                         const isBlankable = !inParen && !startsParen && text.length > 1 && !STOP_WORDS.has(cleanWord);
+                         const isBlank = isBlankable && Math.random() < difficulty;
+                         if (startsParen && !endsParen) inParen = true; if (endsParen) inParen = false;
+                         if(isBlank) totalBlanks++;
+                         return { text, isBlank, isCorrect: null, userInput: null };
+                    });
+                    return { originalHTML: lineHTML, words: wordsWithState, completedHTML: null };
+                });
+            }
+            
+            loadLine = function(index) {
+                if (index >= outlineLines.length) { showResults(); return; }
+                const lineData = outlineLines[index];
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = lineData.originalHTML;
+                let wordDataIndex = 0;
+                const blankedWords = lineData.words.filter(w => w.isBlank);
+                
+                function processNode(node) {
+                    if (node.nodeType === 3) { // Text node
+                        const parts = node.nodeValue.split(/(\s+)/);
+                        const fragment = document.createDocumentFragment();
+                        parts.forEach(part => {
+                            if (wordDataIndex < lineData.words.length && lineData.words[wordDataIndex].text === part) {
+                                const word = lineData.words[wordDataIndex];
+                                if (word.isBlank) {
+                                    const blankIndex = blankedWords.indexOf(word);
+                                    const input = document.createElement('input');
+                                    Object.assign(input, { type: 'text', className: 'quiz-input', autocomplete: 'off' });
+                                    input.dataset.word = word.text;
+                                    input.dataset.index = blankIndex;
+                                    input.style.width = `${word.text.length * 9 + 15}px`;
+                                    fragment.appendChild(input);
+                                } else { fragment.appendChild(document.createTextNode(part)); }
+                                wordDataIndex++;
+                            } else { fragment.appendChild(document.createTextNode(part)); }
+                        });
+                        node.parentNode.replaceChild(fragment, node);
+                    } else if (node.nodeType === 1) { // Element node
+                        Array.from(node.childNodes).forEach(processNode);
+                    }
+                }
+                processNode(tempDiv);
+
+                allElements.currentLineContainer.innerHTML = tempDiv.innerHTML;
+                allElements.currentLineContainer.removeEventListener('keydown', handleInputKeyDown);
+                allElements.currentLineContainer.addEventListener('keydown', handleInputKeyDown);
+                // Restore any previously answered inputs (when resuming a session)
+                const inputs = Array.from(allElements.currentLineContainer.querySelectorAll('input.quiz-input'));
+                inputs.forEach(inp => {
+                    const idx = parseInt(inp.dataset.index, 10);
+                    const savedWord = blankedWords[idx];
+                    if (!savedWord) return;
+                    if (savedWord.isCorrect === true) {
+                        inp.value = savedWord.text;
+                        inp.classList.add('correct');
+                        inp.disabled = true;
+                    } else if (savedWord.isCorrect === false) {
+                        // Show correct word when restored
+                        inp.value = savedWord.text;
+                        if (savedWord.userInput) inp.title = `Your answer: ${savedWord.userInput}`;
+                        inp.classList.add('incorrect');
+                        inp.disabled = true;
+                    }
+                });
+                const firstEnabled = allElements.currentLineContainer.querySelector('input.quiz-input:not(:disabled)');
+                if (firstEnabled) { firstEnabled.focus(); } else { setTimeout(() => completeLine(), 100); }
+            }
+            
+            handleInputKeyDown = function(e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                const currentInput = e.target.closest('input.quiz-input');
+                if(!currentInput) return;
+                checkWord(currentInput);
+                const nextInput = findNextInput(currentInput);
+                if (nextInput) { nextInput.focus(); } 
+                else if (Array.from(allElements.currentLineContainer.querySelectorAll('input.quiz-input')).every(inp => inp.disabled)) {
+                   completeLine();
+                }
+            }
+
+            findNextInput = function(currentInput) {
+                const allInputs = Array.from(allElements.currentLineContainer.querySelectorAll('input.quiz-input:not(:disabled)'));
+                const currentIndex = allInputs.indexOf(currentInput);
+                return allInputs[currentIndex + 1] || null;
+            }
+
+            function checkWord(input) {
+                const cleanOriginal = stripPunctuation(input.dataset.word), cleanUser = stripPunctuation(input.value.trim());
+                const isCorrect = cleanUser.toLowerCase() === cleanOriginal.toLowerCase();
+                input.classList.add(isCorrect ? 'correct' : 'incorrect');
+                input.disabled = true;
+                const lineData = outlineLines[currentLineIndex];
+                const wordIndex = parseInt(input.dataset.index, 10);
+                const wordData = lineData.words.filter(w => w.isBlank)[wordIndex];
+                if (wordData) { wordData.isCorrect = isCorrect; wordData.userInput = input.value.trim(); }
+                // If incorrect, immediately show the correct word in the input
+                if (!isCorrect) {
+                    input.value = input.dataset.word;
+                    input.title = `Your answer: ${wordData ? (wordData.userInput || '') : ''}`;
+                }
+                if(isCorrect) correctAnswers++;
+                blanksAnswered++;
+                updateScore();
+                if (blanksAnswered < totalBlanks) updateProgressIndicator();
+                quizHasUnsavedChanges = true; updateQuizSaveButtonUI('unsaved');
+            }
+
+            function completeLine() {
+                const lineData = outlineLines[currentLineIndex];
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = lineData.originalHTML;
+                let wordDataIndex = 0;
+                
+                function processNode(node) {
+                    if (node.nodeType === 3) {
+                        const parts = node.nodeValue.split(/(\s+)/);
+                        const fragment = document.createDocumentFragment();
+                        parts.forEach(part => {
+                            if (wordDataIndex < lineData.words.length && lineData.words[wordDataIndex].text === part) {
+                                const word = lineData.words[wordDataIndex];
+                                if (word.isBlank) {
+                                    const span = document.createElement('span');
+                                    span.className = word.isCorrect ? 'correct-word' : 'incorrect-word';
+                                    if (!word.isCorrect) {
+                                        // Show user's answer by default; click toggles to correct
+                                        span.textContent = word.userInput || '';
+                                        span.title = `Correct: ${part}`;
+                                        span.dataset.correct = part;
+                                        span.dataset.user = word.userInput || '';
+                                        span.dataset.show = 'user';
+                                    } else {
+                                        span.textContent = part;
+                                    }
+                                    fragment.appendChild(span);
+                                } else { fragment.appendChild(document.createTextNode(part)); }
+                                wordDataIndex++;
+                            } else { fragment.appendChild(document.createTextNode(part)); }
+                        });
+                        node.parentNode.replaceChild(fragment, node);
+                    } else if (node.nodeType === 1) { Array.from(node.childNodes).forEach(processNode); }
+                }
+                processNode(tempDiv);
+                
+                lineData.completedHTML = tempDiv.innerHTML;
+                allElements.historyContainer.innerHTML += lineData.completedHTML;
+                currentLineIndex++;
+                loadLine(currentLineIndex);
+                quizHasUnsavedChanges = true; updateQuizSaveButtonUI('unsaved');
+            }
+
+            function giveHint() {
+                const activeInput = lastFocusedInput;
+                if (!activeInput || activeInput.disabled) return;
+                const originalWord = activeInput.dataset.word;
+                if (activeInput.value.length < originalWord.length) {
+                    activeInput.value = originalWord.substring(0, activeInput.value.length + 1);
+                    activeInput.focus();
+                }
+
+                if (activeInput.value.length === originalWord.length) {
+                    activeInput.value = originalWord;
+                    checkWord(activeInput);
+                    const next = findNextInput(activeInput);
+                    if (next) { next.focus(); } else { setTimeout(() => completeLine(), 200); }
+                }
+            }
+
+            function revealWord() {
+                const activeInput = lastFocusedInput;
+                if (!activeInput || activeInput.disabled) return;
+                const originalWord = activeInput.dataset.word;
+                activeInput.value = originalWord;
+                // Force mark as incorrect and disable further guessing
+                activeInput.classList.add('incorrect');
+                activeInput.disabled = true;
+                const lineData = outlineLines[currentLineIndex];
+                const wordIndex = parseInt(activeInput.dataset.index, 10);
+                const wordData = lineData.words.filter(w => w.isBlank)[wordIndex];
+                if (wordData) { wordData.isCorrect = false; wordData.userInput = originalWord; }
+                blanksAnswered++;
+                updateScore();
+                if (blanksAnswered < totalBlanks) updateProgressIndicator();
+                quizHasUnsavedChanges = true; updateQuizSaveButtonUI('unsaved');
+                const next = findNextInput(activeInput);
+                if (next) { next.focus(); } else { setTimeout(() => completeLine(), 200); }
+            }
+            
+            function updateScore() { allElements.scoreDisplay.textContent = `Score: ${correctAnswers} / ${totalBlanks}`; }
+
+            function showResults() {
+                showScreen('results-screen');
+                if (allElements.hintContainer) allElements.hintContainer.classList.add('hidden');
+                const percentage = totalBlanks > 0 ? Math.round((correctAnswers / totalBlanks) * 100) : 100;
+                allElements.finalScoreDisplay.innerHTML = `Your Score: <span class="${percentage >= 70 ? 'text-green-600' : 'text-red-600'}">${percentage}%</span> (${correctAnswers} / ${totalBlanks} correct)`;
+                allElements.resultsOutline.innerHTML = outlineLines.map(line => line.completedHTML || line.originalHTML).join('');
+                // Ensure spans in results have toggle metadata if they exist in originalHTML only
+                const container = document.createElement('div');
+                container.innerHTML = allElements.resultsOutline.innerHTML;
+                container.querySelectorAll('span.incorrect-word').forEach(span => {
+                    const title = span.getAttribute('title') || '';
+                    if (!span.dataset.correct || !span.dataset.user) {
+                        if (title.startsWith('Your answer: ')) {
+                            // Initially showed correct; title contains user
+                            if (!span.dataset.correct) span.dataset.correct = span.textContent;
+                            if (!span.dataset.user) span.dataset.user = title.replace('Your answer: ', '');
+                            if (!span.dataset.show) span.dataset.show = 'correct';
+                        } else if (title.startsWith('Correct: ')) {
+                            // Initially showed user; title contains correct
+                            if (!span.dataset.correct) span.dataset.correct = title.replace('Correct: ', '');
+                            if (!span.dataset.user) span.dataset.user = span.textContent;
+                            if (!span.dataset.show) span.dataset.show = 'user';
+                        }
+                    }
+                });
+                allElements.resultsOutline.innerHTML = container.innerHTML;
+            }
+            
+            positionHintButton = function(inputElement) {
+                // Fixed container now; no-op except ensuring visibility on quiz screen
+                if (allElements.quizScreen.classList.contains('hidden')) return;
+                if (allElements.hintContainer) allElements.hintContainer.classList.remove('hidden');
+            }
+
+            function updateQuizSaveButtonUI(state) {
+                if (!allElements.quizSaveBtn) return;
+                const btn = allElements.quizSaveBtn;
+                const icons = {
+                    saving: `<svg class="w-5 h-5 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 9a9 9 0 0114.13-5.22M20 15a9 9 0 01-14.13 5.22"></path></svg>`,
+                    saved: `<svg class=\"w-5 h-5 mr-2\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg>`,
+                    default: `<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>`
+                };
+                btn.classList.remove('bg-indigo-500');
+                switch (state) {
+                    case 'unsaved': btn.disabled = false; btn.innerHTML = icons.default + '<span>Save</span>'; btn.classList.add('bg-indigo-500'); break;
+                    case 'saving': btn.disabled = true; btn.innerHTML = icons.saving + '<span>Saving...</span>'; btn.classList.add('bg-indigo-500'); break;
+                    case 'saved': btn.disabled = true; btn.innerHTML = icons.saved + '<span>Saved!</span>'; setTimeout(() => updateQuizSaveButtonUI('idle'), 1200); break;
+                    default: btn.disabled = true; btn.innerHTML = icons.default + '<span>Save</span>'; break;
+                }
+            }
+
+            function saveQuizProgress(goHomeAfter = false) {
+                if (!activeOutlineId) return;
+                updateQuizSaveButtonUI('saving');
+                setTimeout(() => {
+                    outlines[activeOutlineId].quiz = {
+                        difficulty,
+                        currentLineIndex,
+                        totalBlanks,
+                        correctAnswers,
+                        blanksAnswered,
+                        outlineLines,
+                        updatedAt: Date.now()
+                    };
+                    localStorage.setItem('lawOutlines', JSON.stringify(outlines));
+                    quizHasUnsavedChanges = false;
+                    updateQuizSaveButtonUI('saved');
+                    if (goHomeAfter) setTimeout(() => goHome(), 400);
+                }, 300);
+            }
+
+            function loadQuizProgress(id) {
+                const q = outlines[id]?.quiz;
+                if (!q) { showScreen('setup-screen'); return; }
+                activeOutlineId = id;
+                difficulty = q.difficulty || 0;
+                outlineLines = q.outlineLines || [];
+                currentLineIndex = q.currentLineIndex || 0;
+                totalBlanks = q.totalBlanks || 0;
+                correctAnswers = q.correctAnswers || 0;
+                blanksAnswered = q.blanksAnswered || 0;
+                // Render UI
+                showScreen('quiz-screen');
+                allElements.historyContainer.innerHTML = outlineLines.slice(0, currentLineIndex).map(l => l.completedHTML || '').join('');
+                // Ensure toggle metadata exists on restored history
+                const historyWrapper = document.createElement('div');
+                historyWrapper.innerHTML = allElements.historyContainer.innerHTML;
+                historyWrapper.querySelectorAll('span.incorrect-word').forEach(span => {
+                    const title = span.getAttribute('title') || '';
+                    if (!span.dataset.correct || !span.dataset.user) {
+                        if (title.startsWith('Your answer: ')) {
+                            if (!span.dataset.correct) span.dataset.correct = span.textContent;
+                            if (!span.dataset.user) span.dataset.user = title.replace('Your answer: ', '');
+                            if (!span.dataset.show) span.dataset.show = 'correct';
+                        } else if (title.startsWith('Correct: ')) {
+                            if (!span.dataset.correct) span.dataset.correct = title.replace('Correct: ', '');
+                            if (!span.dataset.user) span.dataset.user = span.textContent;
+                            if (!span.dataset.show) span.dataset.show = 'user';
+                        }
+                    }
+                });
+                allElements.historyContainer.innerHTML = historyWrapper.innerHTML;
+                updateScore();
+                updateProgressIndicator();
+                loadLine(currentLineIndex);
+                if (allElements.hintContainer) allElements.hintContainer.classList.remove('hidden');
+                quizHasUnsavedChanges = false; updateQuizSaveButtonUI('idle');
+            }
+            
+            initialize();
+        });
     </script>
 </body>
 </html>
